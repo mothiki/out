@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: runTest.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: runTest.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @file
+ * Provides all functions required in the flow of running a test. From clicking the after selecting a patient to the Run Screen
+ */
+
+
+/**
+ * Part of Run Skin. This is fired when user clicks 'Capture Skin' in the Order Details Page of a run.
+ * This function calls the controller to capture the image from camera and display its luminance.
+ * 
+ */
+function getImage() {
+        var submitError = false;
+        // startTimerCount(5);
+        errorMessage = true; //block other messages from displaying
+
+        document.getElementById("title").innerHTML = "Skin Capture";
+        document.getElementById("nameLoading").innerHTML = "Skin Capturing ...";
+
+        showTable("resultDisplay");
+        var ordNo = document.getElementById("orderNo").value;
+        $.getJSON('/skinCapture', {
+            orderNo: ordNo
+        }, function(data, status) {
+            document.getElementById("title").innerHTML = "STEP 3: SET ORDER DETAILS";
+            showTable("setOrderDetail");
+            document.getElementById("lumosity").value = data["lumosity"];
+            document.getElementById("red").value = data["red"];
+            document.getElementById("blue").value = data.blue;
+            document.getElementById("green").value = data.green;
+            document.getElementById("imageFile").value = data.imageFile;
+            console.log(" lumosity is " + data["lumosity"]);
+
+            if (document.getElementById("uRole").value == "Admin") {}
+            if (powerType == "AUTOMATIC") {
+                document.getElementById("laserPower").innerHTML = Math.round(100 * data.laserPower) / 100 + " mW";
+            }
+            clearInterval(timer);
+            errorMessage = false;
+
+        }).fail(function(d, textStatus, error) {
+            console.error("skin Capture failed, status: " + textStatus + ", error: " + error);
+            var err = JSON.parse(d.responseText);
+            errorMessage = false;
+            // CustomUBlock();
+            
+            document.getElementById("title").innerHTML = "FAILED";
+            document.getElementById("nameFail").innerHTML = "Skin capture is Failed(" + err.message + ")";
+            showTable("failCross");
+            
+        });
+
+    }
+    
+
+/**
+ * Global Variable ranProcedureOnce. This is set by RunTest and 
+ * ShowStatus functions and used to convey if in case of multiple procedure repeats, the procedure has or has not run once already
+ * @type {boolean}
+ */   
+var ranProcedureOnce;
+
+/**
+ * Is fired when user hits Run Test from order details page (Blood/Skin)
+ * It shows the run screen, starts the run and then calls the statusUpdates() function to show text updates and also calls the 
+ * showMonitoring() function to monitor and display Spectrometer parameters
+ * It also shows the Run Results Charts after the run is finished.  
+ * 
+ * @param {String} testType stands for the spectra type of the Spectrometer. 'BLOOD' or 'SKIN'  
+ * 
+ */ 
+function RunTest(testType) {
+
+    document.getElementById("canvasN").style.display = "none";
+    document.getElementById("canvasFL").style.display = "none";
+    document.getElementById("nameLoading").innerHTML = "";
+
+    if (lastOrderNo != null &amp;&amp; lastOrderNo == document.getElementById("orderNo").value) {
+
+        document.getElementById("runResultContent").style.display = "block";
+        document.getElementById("dashboardElapsedTime").style.display = "none";
+        showTable("resultDisplay");
+        return;
+    }
+    document.getElementById("runResultContent").style.display = "none";
+    document.getElementById("results").value = "";
+    var errorMessage = false;
+    var dataToBeSent = $("form").serialize();
+    document.getElementById("title").innerHTML = "RUNNING TEST";
+    document.getElementById("nameLoading").innerHTML = "TESTING";
+    
+    showTable("resultDisplay");
+    showStatus = true;
+    ranProcedureOnce = false;
+    var uuid = new Date().valueOf();
+    showMonitoring(uuid, 1);
+    statusUpdates();
+    $.post('/KaligiaRunOrder', dataToBeSent, function(data, status) { 
+
+            /* if(data.passedValidation){
+            	document.getElementById("title").innerHTML="Results : Passed Validation";	
+            }else{
+            	document.getElementById("title").innerHTML="Results : Failed Validation";
+            } */
+            document.getElementById("title").innerHTML = "Results"
+            document.getElementById("loaderImageResult").style.display = "none";
+            showTable("resultDisplay");
+            document.getElementById("runResultContent").style.display = "block";
+            document.getElementById("nameLoading").innerHTML = "Completed";
+            console.log("Posted. data: " + data.runID + ", status: " + status);
+            document.getElementById("RunID").value = data.runID;
+            errorMessage = true; //stop the Test Complete message from being overwritten
+            document.getElementById("timeMessage").textContent = "Test Complete";
+            clearInterval(timer);
+            lastOrderNo = document.getElementById("orderNo").value;
+            if (status == "success") {
+                document.getElementById("message").innerHTML = "";
+                displayResults(data);
+            }
+            window.setTimeout(function() {
+
+            }, 2000);
+
+
+        })
+        .fail(function(d, textStatus, error) {
+
+            shutdownMonitoring(uuid);
+            document.getElementById("title").innerHTML = "FAILED";
+            document.getElementById("nameFail").innerHTML = "RunTest is Failed" + error;
+            showTable("failCross");
+
+            clearInterval(timer);
+            submitError = true;
+            if (d.responseText == "") {
+                driverFail = true;
+                console.log("no response from system.");
+            } else {
+                var err = JSON.parse(d.responseText);
+                console.log("form1 submit err.message: " + err.message + ", status: " + textStatus + ", error: " + error);
+            }
+            if (err.message == "Invalid CaF2") {
+                document.getElementById("title").innerHTML = "CaF2 Validation Failed";
+            }
+            if (err.message == "Invalid DarkNoise") {
+                document.getElementById("title").innerHTML = "Dark Noise Validation Failed";
+            }
+        })
+        .complete(function(d, textStatus) {
+            shutdownMonitoring(uuid);
+            console.log("Complete. Status: " + textStatus);
+            showStatus = false;
+        })
+        .always(function() {
+
+        });
+
+ 
+}
+
+
+/**
+ * Called by RunTest(..). This runs on a constant timed loop, displaying status messages of a Run in the Run Screen.
+ * 
+ */
+function statusUpdates() {
+   
+    if (!driverFail &amp;&amp; showStatus) {
+        $.getJSON('/getStatus', function(data, status) {
+                // console.log("data="+data);
+                var seconds = data.time;
+                var m = (seconds / 60) >> 0;
+                var s = (seconds - m * 60) + '';
+                document.getElementById("nameLoading").innerHTML = data.segmentStatus;
+                if (data.segmentStatus == "Finished Clean CaF2 Segment" &amp;&amp; !ranProcedureOnce) {
+   
+                    var confirmed = confirm("Please put sample into the holder and proceed.")
+                    if (confirmed) {
+                        continueSegment();
+                    }
+                    ranProcedureOnce = true;
+                } else {
+
+                    continueSegment();
+                }
+
+
+
+            })
+            .fail(function(d, textStatus, error) {
+                console.log("status Update fail: d=" + d + ", textStatus=" + textStatus + ", error=" + error);
+                if (d.responseText == "") {
+   
+                    submitError = true;
+                    driverFail = true;
+                    errorMessage = false;
+                    clearInterval(timer);
+                    errorTime = 10000;
+
+                    console.log("no response from system.");
+                    window.setTimeout(function() {
+
+                        location.reload();
+                    }, 10000);
+                }
+                submitError = true; //TODO: Test this
+                clearInterval(timer);
+            })
+            .always(function() {
+                
+                window.setTimeout(function() {
+
+                    statusUpdates();
+                }, 250);
+                
+            });
+    }
+
+}
+
+/**
+ * Called by RunTest once the run is finished. This function displays the result screen based on the passed in data
+ * 
+ * @param {object} data A KaligiaRunOrder java object
+ * 
+ */
+function displayResults(data) {
+
+    if (data != null) {
+        runResultsData = data;
+        drawGraphs();
+        $.get('/PredictGlucose', {
+            runId: document.getElementById("RunID").value
+        }, function(data, status) {});
+    } else {
+        $.get('/GetSpectrum', {
+            runId: document.getElementById("RunID").value
+        }, function(data, status) {
+            runResultsData = data;
+            drawGraphs();
+        });
+        $.get('/PredictGlucose', {
+            runId: document.getElementById("RunID").value
+        }, function(data, status) {});
+    }
+}
+
+/**
+ * Called by displayResults(). This functions renders all the graphs in the Run Screen after the Run is finished.
+ * 
+ */
+function drawGraphs() {
+    document.getElementById("showLiveSpectra").style.display = "none";
+    console.log(runResultsData)
+    var photonList = runResultsData.photon;
+    var clr = ["#FF6600", "#003366", "#FF9900", "#00FF00", "#FF0000", "#000000", "#663399", "#663300", "#FF0080", "#5F021F"];
+    var wavenumberList = runResultsData.wavenumber;
+
+    var chartDataSets = [];
+
+    for (var i = 0; i &lt; 10; i++) {
+        var j = i + 1;
+        var tt = "Reading" + j;
+        var photoni = photonList[i];
+        var wavenumberi = wavenumberList[i];
+        if (photoni != null) {
+            var dataPoints = [];
+            for (var pIndex = 0; pIndex &lt; wavenumberi.length; pIndex++) {
+                dataPoints.push({
+                    x: wavenumberi[pIndex],
+                    y: photoni[pIndex]
+                })
+            }
+            dataSeries = {
+                type: "line",
+                markerSize: 2,
+                dataPoints: dataPoints,
+                name: tt,
+                showInLegend: true,
+                legendText: tt
+            }
+            chartDataSets.push(dataSeries);
+        }
+    }
+
+    /*  var validationChartDataSets = [];
+     var summaryRunSpectraValidation = runResultsData.summaryRunSpectraValidation
+     var validationXAxisMin = 9999;
+     var validationXAxisMax = 0;
+     for(key in summaryRunSpectraValidation){
+     	var xList = Object.keys(summaryRunSpectraValidation[key]);
+     	validationXAxisMin = Math.min(Math.min(xList), validationXAxisMin)
+     	validationXAxisMax = Math.max(Math.max(xList), validationXAxisMax)
+     	
+     	xList.sort(function(a, b){return a - b});
+     	var dataPoints = [];
+         for(var i=0; i &lt; xList.length; i++){
+         	dataPoints.push({
+         		x: xList[i],
+         		y: summaryRunSpectraValidation[key][xList[i]]
+         	})
+         }
+         dataSeries = {
+     			type: "line",
+     			markerSize: 2,
+     			dataPoints: dataPoints,
+     			name: key,
+     			showInLegend: true,
+     			legendText: key
+     	}
+     	validationChartDataSets.push(dataSeries);
+     	
+     } */
+
+
+    var photonFLList = runResultsData.flrphoton;
+    var clr = ["#FF6600", "#003366", "#FF9900", "#00FF00", "#FF0000", "#000000", "#663399", "#663300", "#FF0080", "#5F021F"];
+    var wavenumberFLList = runResultsData.flrwavenumber;
+
+    var flchartDataSets = [];
+
+    for (var i = 0; i &lt; 10; i++) {
+        var j = i + 1;
+        var tt = "Reading" + j;
+        var photoni = photonFLList[i];
+        var wavenumberi = wavenumberFLList[i];
+        if (photoni != null) {
+            var dataPoints = [];
+            for (var pIndex = 0; pIndex &lt; wavenumberi.length; pIndex++) {
+                dataPoints.push({
+                    x: wavenumberi[pIndex],
+                    y: photoni[pIndex]
+                })
+            }
+            dataSeries = {
+                type: "line",
+                markerSize: 2,
+                dataPoints: dataPoints,
+                name: tt,
+                showInLegend: true,
+                legendText: tt
+            }
+            flchartDataSets.push(dataSeries);
+        }
+    }
+    document.getElementById("canvasN").style.display = "block";
+    document.getElementById("canvasFL").style.display = "block";
+    var spectraDiv = document.getElementById("canvasN");
+    var spectraFLDiv = document.getElementById("canvasFL");
+    /* var validationDiv = document.getElementById("canvasValidation") */
+
+
+    nctx = new CanvasJS.Chart(spectraDiv, {
+        axisX: {
+            title: "Raman Shift",
+            titleFontSize: 12,
+            titleFontFamily: "arial"
+        },
+        axisY: {
+            title: "Photon Count",
+            titleFontSize: 12,
+            titleFontFamily: "arial"
+        },
+        animationEnabled: true,
+        zoomEnabled: true,
+        zoomType: "xy",
+        toolTip: {
+            content: "{name} X:{x} Y:{y}"
+        },
+        title: {
+            text: "Raman Shift(cm^-1) vs Photon Count (x1)",
+            fontSize: 12,
+            fontFamily: "arial",
+            fontStyle: "bold"
+        },
+        data: chartDataSets,
+    });
+    nctx.render()
+
+    /* var passFilterLevel = ["Fail", "Good", "Not Good", "Maybe"]
+ validationContext = new CanvasJS.Chart(validationDiv, {
+    axisX: {
+        title: "Wavenumber",
+        titleFontSize: 12,
+        titleFontFamily: "arial",
+        minimum: 300,
+        maximum: 1800
+    },
+    axisY: {
+        title: "Boxcarred Photon Count",
+        titleFontSize: 12,
+        titleFontFamily: "arial"
+    },
+    animationEnabled: true,
+    zoomEnabled: true,
+    zoomType: "xy",
+    toolTip:{
+    	  content: "{name} X:{x} Y:{y}"
+      },
+    title: {
+        text: "Validation Chart : " + passFilterLevel[runResultsData.runPassFilterLevel],
+        fontSize: 12,
+        fontFamily: "arial",
+        fontStyle: "bold"
+    },
+    data: validationChartDataSets,
+});
+validationContext.render() */
+
+    flctx = new CanvasJS.Chart(spectraFLDiv, {
+        axisX: {
+            title: "Raman Shift",
+            titleFontSize: 12,
+            titleFontFamily: "arial"
+        },
+        axisY: {
+            title: "Photon Count",
+            titleFontSize: 12,
+            titleFontFamily: "arial"
+        },
+        animationEnabled: true,
+        zoomEnabled: true,
+        zoomType: "xy",
+        title: {
+            text: "Raman Shift(cm^-1) vs Photon Count (x1) FL Removed",
+            fontSize: 12,
+            fontFamily: "arial",
+            fontStyle: "bold"
+        },
+        data: flchartDataSets,
+    });
+    flctx.render()
+
+    
+
+}
+
+/**
+ * Triggered by onChange event over Procedures Drop Down in Order Details Page
+ * Sets Parameters and keeps ready based as per the Selected Procedure
+ *
+ */
+function procedureChange() {
+    var proc = document.getElementById("procedureDrop").value;
+    document.getElementById("procedureList").value = document.getElementById("procedureDrop").getAttribute("data-id");
+    document.getElementById("procedureList").selectedIndex = document.getElementById("procedureDrop").selectedIndex;
+    document.getElementById("procRepeats").value = "1";
+    var tpsId = document.getElementById("procedureList").value;
+    /*document.getElementById("procFrame").innerHTML = "&lt;iframe src=ProcedureDetails.html?tpsId=" + tpsId + ">&lt;/iframe>";*/
+    $.get("/GetProcedureDetails", {
+            procedureName: proc
+        },
+        function(data) {
+            powerType = data.powerType;
+            if (data.type == "EX-VIVO") {
+                var sample = document.getElementById("sample");
+                var sampleTextBox = document.createElement("input");
+                sampleTextBox.type = "text";
+                sampleTextBox.id = "specimen";
+                sampleTextBox.name = "specimen";
+                sampleTextBox.oninput = specimenChange;
+                sampleTextBox.classList.add("newinput")
+                sample.replaceChild(sampleTextBox, sample.children[0]);
+                document.getElementById("sampleText").innerHTML = "Specimen:";
+            } else {
+                /* var sample = document.getElementById("sample"); */
+               /*  var sampleSelectBox = document.createElement("select"); */
+                /* sample.children[0].selectedIndex = "5" */
+                /* sampleSelectBox.id = "specimen";
+                sampleSelectBox.name = "specimen";
+                sampleSelectBox.onchange = specimenChange;
+                var fleft = document.createElement("option");
+                var fright = document.createElement("option");
+                var uarm = document.createElement("option");
+                var neck = document.createElement("option");
+                var finger = document.createElement("option");
+                var pleft = document.createElement("option");
+                var pright = document.createElement("option");
+                var other = document.createElement("option");
+                fleft.value = "forarm left";
+                fleft.innerHTML = "Forearm Left";
+                fright.value = "forarm right";
+                fright.innerHTML = "Forearm Right";
+                uarm.value = "upper arm";
+                uarm.innerHTML = "Upper Arm";
+                neck.value = "neck";
+                neck.innerHTML = "Neck";
+                finger.value = "finger";
+                finger.innerHTML = "Finger";
+                pleft.value = "palm left";
+                pleft.innerHTML = "Palm Left";
+                pright.value = "palm right";
+                pright.innerHTML = "Palm Right";
+                other.value = "other";
+                other.innerHTML = "Other";
+
+                sampleSelectBox.add(fleft);
+                sampleSelectBox.add(fright);
+                sampleSelectBox.add(uarm);
+                sampleSelectBox.add(neck);
+                sampleSelectBox.add(finger);
+                sampleSelectBox.add(pleft);
+                sampleSelectBox.add(pright);
+                sampleSelectBox.add(other);
+
+                sampleSelectBox.selectedIndex = "5";
+                sampleSelectBox.classList.add("newinput")
+                sample.replaceChild(sampleSelectBox, sample.children[0]); */
+
+               /*  document.getElementById("sampleText").innerHTML = "Sample Location:"; */
+            }
+
+            if (data.powerType == "MANUAL") {
+                document.getElementById("laserPower").innerHTML = data.milliWatts;
+                //document.getElementById("ajaxButton").style.display = "none";
+                document.getElementById("ajaxButton").style.display = "block";
+            } else {
+                specimenChange();
+                document.getElementById("ajaxButton").style.display = "block";
+            }
+        }
+
+    );
+}
+
+/**
+ * Global Variable spec
+ */
+var spec = document.getElementById("specimen");
+
+/**
+ * Triggered by changing the Specimen
+ * Sets and prepares parameters as per the specimen selected
+ * 
+ */
+function specimenChange() {
+    //if (powerType == "AUTOMATIC"){
+	
+    var proc = document.getElementById("procedureDrop").value;
+    var pid = document.getElementById("patientId");
+    var subId = document.getElementById("searchRowId");
+
+    document.getElementById("red").value = "";
+    document.getElementById("blue").value = ""
+    document.getElementById("green").value = "";
+    document.getElementById("imageFile").value = "";
+    if (pid.value == null || pid.value == "") {
+        document.getElementById("lumosity").innerHTML = "Please fill out all forms";
+        return;
+    }
+    document.getElementById("lumosity").innerHTML = "Looking up";
+    $.get("/getLaserPower", {
+            specimen: spec.value,
+            patientId: pid.value,
+            subjectId: subId
+        },
+        function(data) {
+            if (data.found) {
+                if (powerType == "AUTOMATIC") {
+                    document.getElementById("laserPower").innerHTML = data.message;
+                }
+                document.getElementById("lumosity").value = data.luminosity;
+            } else if (powerType == "AUTOMATIC") {
+                document.getElementById("laserPower").innerHTML = "Skin Capture Required";
+                document.getElementById("lumosity").value = "";
+            } else {
+                document.getElementById("lumosity").value = "";
+            }
+
+        });
+    /*//}
+    inputChange('orderDetailsContent');*/
+}
+
+/**
+ * Triggered by input event in Description field in the Order Details Page
+ * Adjusts the height of the text box based on the content being entered
+ * 
+ */
+function descInputChange() {
+    expandDesc();
+    if (lastOrderNo != null &amp;&amp; lastOrderNo == document.getElementById("orderNo").value) {
+        $.get("/getNewOrderNo", function(data, status) {
+            //order no
+            document.getElementById("orderNo").value = data;
+        });
+    }
+}
+
+/**
+ * Expands the Description field in Order Details Page
+ * 
+ */
+function expandDesc() {
+    document.getElementById("msg").style = "height:1em";
+    document.getElementById("msg").style = "height:" + (document.getElementById("msg").scrollHeight - 3) + "px";
+}
+
+/**
+ * Collapses the Description Field in Order Details Page to its initial default value of height : 20px 
+ */
+function collapseDesc() {
+    if (document.activeElement !== document.getElementById("msg")) {
+        document.getElementById("msg").style = "height:20px";
+    }
+}
+
+/**
+ * Saves the result notes of a run in the Run Screen
+ * 
+ */
+function postRunNotes() {
+    var runID = document.getElementById("RunID").value;
+    var resultNotes = document.getElementById("results").value;
+    if (resultNotes == "") {
+        alert("Please fill result note box.")
+    } else {
+        console.log("runID=" + runID + " note='" + resultNotes + "'");
+        $.get('/KaligiaRunResult2', {
+                run_id: runID,
+                notes: resultNotes
+            }, function(data, status) {
+                console.log("Notes Posted. data: " + data + ", status: " + status);
+                if (data == true) {
+                    alert("Run Notes added successfully")
+                   
+                }
+            })
+            .fail(function(d, textStatus, error) {
+                console.error("Run Notes update, status: " + textStatus + ", error: " + error);
+                alert("Run Notes update failed. Please check..")
+            });
+    }
+};
+
+/**
+ * Called by RunTest() > statusUpdates() to continue the run
+ * 
+ */
+function continueSegment() {
+    $.get('/continueSegment', function(data, status) {
+        document.getElementById("continueSegmentDiv").style.display = "none";
+    });
+}
+
+/**
+ * Prints out the run results
+ * 
+ */
+function printResults() {
+    var printContents = document.getElementById("resultsPrintable");
+    var originalContents = document.body.innerHTML;
+    var npng = document.getElementById("canvasN").toDataURL("image/png");
+    var flpng = document.getElementById("canvasFL").toDataURL("image/png");
+    document.body.innerHTML = printContents.innerHTML;
+    document.getElementById("resultNPNG").style.display = "block";
+    document.getElementById("resultNPNG").src = npng;
+    document.getElementById("resultFLPNG").style.display = "block";
+    document.getElementById("resultFLPNG").src = flpng;
+    document.getElementById("smallH1").style.display = "block";
+    document.getElementById("smallH2").style.display = "block";
+    document.getElementById("largeH2").style.display = "none";
+    window.print();
+    document.body.innerHTML = originalContents;
+    drawGraphs();
+}
+
+/**
+ * In Patient Vitals Page, calculates and updates the Meal Duration according to the Meal Time entered
+ * 
+ */
+function mealTimeChange() {
+    var date = new Date();
+    var midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
+    var minutes = Math.floor((date.getTime() - midnight.getTime()) / (1000 * 60));
+    var tminutes = Math.floor(document.getElementById("mealTime").valueAsNumber / (1000 * 60));
+    var dminutes = Math.min(minutes - tminutes, 360);
+    var dhours = Math.floor(dminutes / 60);
+    var ddminutes = dminutes % 60;
+    if (dhours &lt; 7) {
+        document.getElementById("mealHours").value = dhours;
+        document.getElementById("mealMinutes").value = Math.floor(ddminutes / 15) * 15;
+    }
+    document.getElementById("meal").value = dminutes;
+}
+
+/**
+ * In Patient Vitals Page, calculates and updates the Meal Time according to the Meal Duration entered
+ * 
+ */
+function mealDurationChange() {
+    var date = new Date();
+    var s = date.getTime();
+    s -= document.getElementById("mealHours").value * 3600000;
+    s -= document.getElementById("mealMinutes").value * 60000;
+    date.setTime(s);
+    document.getElementById("mealTime").value = (date.getHours() &lt; 10 ? "0" + date.getHours() : date.getHours()) + ":" + (date.getMinutes() &lt; 10 ? "0" + date.getMinutes() : date.getMinutes());
+    document.getElementById("meal").value = parseInt(document.getElementById("mealHours").value) * 60 + parseInt(document.getElementById("mealMinutes").value);
+}
+
+/**
+ * In Skin Spectrometer, triggered by Next button, on Patient Vitals Screen.
+ * Validates all fields for correct values and shows errors if any. If everything passes validation, then it shows Order Details Page.
+ * 
+ */
+function setOrderDisplay() {
+    /*showTable("setOrderDetail");*/
+    var patientID = document.getElementById("idSearch").value;
+    document.getElementById("patientIdOrder").value = document.getElementById("idSearch").value;
+    document.getElementById("givenNameOrder").value = document.getElementById("nameSearch").value;
+    var meal = document.getElementById("mealTime").value;
+    var temp = document.getElementById("pTemperature").value;
+    var bp1 = document.getElementById("highBP").value;
+    var bp2 = document.getElementById("lowBP").value;
+    var HR = document.getElementById("pHeartRate").value;
+    var ol = document.getElementById("pOLevel").value;
+    var oc = document.getElementById("oilContent").value;
+    var hy = document.getElementById("hydration").value;
+    var gl = document.getElementById("glucose").value;
+    document.getElementById("patientVitalsErrorMsgBlock").innerHTML = "";
+   var complete = true;
+    var errorMessage = "";
+    if (meal == null || meal == "") {
+        errorMessage += "Please enter Time since last meal. &lt;br />"
+        complete = false;
+    }
+    if (temp == null || temp == "") {
+        errorMessage += "Please enter Temperature. &lt;br />"
+        complete = false;
+    }else if(!isPositiveNumber(temp) || temp > 110){
+   		errorMessage += "Please enter a valid value for Temperatre. &lt;br />"
+        complete = false;
+   }
+    
+    if (bp1 == null || bp1 == "" || bp2 == null || bp2 == "") {
+        errorMessage += "Please enter Blood Pressure. &lt;br />"
+        complete = false;
+    }else if(!isPositiveNumber(bp1) || !isPositiveNumber(bp2) || parseInt(bp1) &lt; parseInt(bp2) || bp1 > 200 || bp2 > 115){
+    	errorMessage += "Please enter a valid value for Blood Pressure. &lt;br />"
+        complete = false;
+    }
+    
+    if (HR == null || HR == "") {
+        errorMessage += "Please enter Heart Rate. &lt;br />"
+        complete = false;
+    }else if(!isPositiveNumber(HR) || HR > 220){
+    	errorMessage += "Please enter a valid value for Heart Rate. &lt;br />"
+        complete = false;
+    }
+    
+    if (ol == null || ol == "") {
+        errorMessage += "Please enter Oxygen level. &lt;br />"
+        complete = false;
+    }else if(!isPositiveNumber(ol) || ol > 100){
+    	errorMessage += "Please enter a valid value for Oxygen level. &lt;br />"
+        complete = false;
+    }
+    
+    if (oc == null || oc == "") {
+        errorMessage += "Please enter Oil Content. &lt;br />"
+        complete = false;
+    }else if(!isPositiveNumber(oc) || oc > 100){
+    	errorMessage += "Please enter a valid value for Oil Content. &lt;br />"
+        complete = false;
+    }
+    
+    if (hy == null || hy == "") {
+        errorMessage += "Please enter Hydration. &lt;br />"
+        complete = false;
+    }else if(!isPositiveNumber(hy) || hy > 100){
+    	errorMessage += "Please enter a valid value for Hydration. &lt;br />"
+        complete = false;
+    }
+    
+    if (gl == null || gl == "") {
+        errorMessage += "Please enter Glucose Level. &lt;br />"
+        complete = false;
+    }else if(!isPositiveNumber(gl)){
+    	errorMessage += "Please enter a valid value for Glucose Level. &lt;br />"
+        complete = false;
+    }
+    
+    if (complete) {
+        document.getElementById("title").innerHTML = "STEP 3: SET ORDER DETAILS";
+        showTable("setOrderDetail");
+    }else{
+    	document.getElementById("patientVitalsErrorMsgBlock").insertAdjacentHTML('afterbegin', errorMessage + "&lt;br />")
+    	
+    }
+
+}
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#adminDashboard">adminDashboard</a></li><li><a href="global.html#back">back</a></li><li><a href="global.html#caf2CalibrationData">caf2CalibrationData</a></li><li><a href="global.html#caf2StatusSource">caf2StatusSource</a></li><li><a href="global.html#calibrateScreenOne">calibrateScreenOne</a></li><li><a href="global.html#cameraCalibrate">cameraCalibrate</a></li><li><a href="global.html#changeColorByStatus">changeColorByStatus</a></li><li><a href="global.html#checkingStatus">checkingStatus</a></li><li><a href="global.html#checkSessionTimeout">checkSessionTimeout</a></li><li><a href="global.html#checkStatus">checkStatus</a></li><li><a href="global.html#checkVersion">checkVersion</a></li><li><a href="global.html#collapseDesc">collapseDesc</a></li><li><a href="global.html#continueSegment">continueSegment</a></li><li><a href="global.html#createNewPatients">createNewPatients</a></li><li><a href="global.html#descInputChange">descInputChange</a></li><li><a href="global.html#displayResults">displayResults</a></li><li><a href="global.html#drawGraphs">drawGraphs</a></li><li><a href="global.html#elapsedTime">elapsedTime</a></li><li><a href="global.html#expandDesc">expandDesc</a></li><li><a href="global.html#exsistPt">exsistPt</a></li><li><a href="global.html#factoryCalibrateContent">factoryCalibrateContent</a></li><li><a href="global.html#get24HourDateTime">get24HourDateTime</a></li><li><a href="global.html#getCaf2Calibration">getCaf2Calibration</a></li><li><a href="global.html#getImage">getImage</a></li><li><a href="global.html#getLastCalibration">getLastCalibration</a></li><li><a href="global.html#getNewVersion">getNewVersion</a></li><li><a href="global.html#isNumeric">isNumeric</a></li><li><a href="global.html#isPositiveNumber">isPositiveNumber</a></li><li><a href="global.html#mealDurationChange">mealDurationChange</a></li><li><a href="global.html#mealTimeChange">mealTimeChange</a></li><li><a href="global.html#newpatient">newpatient</a></li><li><a href="global.html#newPatientReset">newPatientReset</a></li><li><a href="global.html#opDahboardDisplay">opDahboardDisplay</a></li><li><a href="global.html#orderdetailblood">orderdetailblood</a></li><li><a href="global.html#pad">pad</a></li><li><a href="global.html#postRunNotes">postRunNotes</a></li><li><a href="global.html#printResults">printResults</a></li><li><a href="global.html#procedureChange">procedureChange</a></li><li><a href="global.html#ranProcedureOnce">ranProcedureOnce</a></li><li><a href="global.html#recalibratebutton">recalibratebutton</a></li><li><a href="global.html#refreshPage">refreshPage</a></li><li><a href="global.html#resetSearch">resetSearch</a></li><li><a href="global.html#runningSource">runningSource</a></li><li><a href="global.html#RunTest">RunTest</a></li><li><a href="global.html#saveCaf2Calibration">saveCaf2Calibration</a></li><li><a href="global.html#searchPatient">searchPatient</a></li><li><a href="global.html#searchPt">searchPt</a></li><li><a href="global.html#selectSearchNew">selectSearchNew</a></li><li><a href="global.html#selectSearchVital">selectSearchVital</a></li><li><a href="global.html#setOrderDisplay">setOrderDisplay</a></li><li><a href="global.html#showMonitoring">showMonitoring</a></li><li><a href="global.html#showTable">showTable</a></li><li><a href="global.html#showWaveLengthCalibration">showWaveLengthCalibration</a></li><li><a href="global.html#shutdownMonitoring">shutdownMonitoring</a></li><li><a href="global.html#slectedPatientnext">slectedPatientnext</a></li><li><a href="global.html#spec">spec</a></li><li><a href="global.html#specimenChange">specimenChange</a></li><li><a href="global.html#stack">stack</a></li><li><a href="global.html#statusUpdates">statusUpdates</a></li><li><a href="global.html#toggleMainNavIcons">toggleMainNavIcons</a></li><li><a href="global.html#vitalDisplay">vitalDisplay</a></li><li><a href="global.html#vitalHistory">vitalHistory</a></li><li><a href="global.html#vitalRecords">vitalRecords</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Tue May 01 2018 17:13:39 GMT-0400 (Eastern Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

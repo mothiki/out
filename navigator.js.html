@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: navigator.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: navigator.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @file
+ * Provides functions to navigate as well as layout the different pages
+ */
+
+/**
+ * A variable in the global namespace. Stores an array of ids as a stack.
+ * Every time showTable(id) is called, that id is pushed into the stack and back() (navigating back within the app) uses this stack to navigate  
+ * @type {boolean}
+ */
+var stack = [];
+
+/**
+ * Removes the current page id(s) from the stack and then displays page whose id is the top most in the stack   
+ * 
+ */
+function back() {
+    stack.pop(); //remove current item
+    var a = stack.pop(); //retreive previous item
+    if (a == "createPt"){
+    	a = stack.pop(); //go back twice for creating patient
+    }
+    if (a == "resultDisplay"){
+    	a = stack.pop(); //go back twice for run test
+    }
+    if (a) {
+        showTable(a);
+    }
+}
+
+/**
+ * Shows the page with the passed 'id'. Pushes this id onto the top of the stack.
+ * Also performs any tasks specific to opening up a particular page
+ * @param id
+ * 
+ */
+function showTable(id) {
+    stack.push(id);
+    var child = document.getElementById("content").firstChild;
+
+    if (child != null) {
+        document.getElementById("container").appendChild(child);
+    }
+
+    document.getElementById("content").appendChild(document.getElementById(id));
+
+    if (id == "exsistingPt") {
+        //document.getElementById("backbutton").style.display = "none";
+        resetSearch();
+        document.getElementById("noPtResult").style.display = "none";
+    }
+    if (id == "calibrate") {
+        document.getElementById("calbWorking").style.display = "none";
+        document.getElementById("okButton").style.display = "none";
+        document.getElementById("calibrateButton").style.display = "block";
+    }
+    if (id == "createPt") {
+        document.getElementById("newPtNextText").innerHTML = "Save";
+        document.getElementById("newPtNext").onclick = createNewPatients;
+        newPatientReset();
+    }
+    if (id == "setOrderDetail") {
+        $.get("/getNewOrderNo", function(data, status) {
+            document.getElementById("orderNo").value = data;
+        });
+    }
+}
+
+/**
+ * This is fired when User clicks the Calibration button in Operator Home Page.
+ * It shows the page with the different calibration options for Operator
+ * 
+ */
+function calibrateScreenOne() {
+    document.getElementById("calbButton").disabled = true;
+    document.getElementById("title").innerHTML = "CALIBRATE";
+    showTable("calibrateScreen1Content");
+}
+
+
+
+/**
+ * Display the Operator Home Page
+ * 
+ */
+function opDahboardDisplay() {
+    document.getElementById("title").innerHTML = "OPERATOR DASHBOARD";
+    showTable("OpDashboard");
+    document.getElementById('myModal').style.display = "none";
+    
+}
+
+/**
+ * Displays the patient search screen
+ * 
+ */
+function exsistPt() {
+    document.getElementById("idSearch").value = "";
+    document.getElementById("nameSearch").value = "";
+    document.getElementById("dateSearch").value = "";
+    document.getElementById("title").innerHTML = "STEP 1: FIND PATIENT";
+    showTable("exsistingPt");
+}
+
+/**
+ * Shows the Add New Patient Screen
+ * 
+ */
+function newpatient() {
+    /* document.getElementById("patientIdS").value = ""; */
+    newPatientReset();
+    document.getElementById("givenNameS").value = "";
+    document.getElementById("DateOfBirthS").value = "";
+    document.getElementById("pheightS").value = "";
+    document.getElementById("pweightS").value = "";
+    //document.getElementById("meds").value="";
+    document.getElementById("title").innerHTML = "NEW PATIENT";
+    showTable("createPt");
+}
+
+/**
+ * Resets all fields in Add New Patient Page
+ * 
+ */
+function newPatientReset() {
+    /* document.getElementById("patientIdS").value = ""; */
+    document.getElementById("DateOfBirthS").value = "";
+    document.getElementById("patientGenderS").value = "";
+    document.getElementById("patientEthnicityS").value = "";
+    document.getElementById("pheightS").value = "";
+    document.getElementById("pweightS").value = "";
+    document.getElementById("lastGivenName").value = "";
+    document.getElementById("givenNameS").value = "";
+    var modal = document.getElementById('myModal');
+    modal.style.display = "none";
+    document.getElementById("newPatientErrorMsgBlock").innerHTML = "";
+    document.getElementById("newPatientErrorMsgBlock").style.display = "none";
+    //document.getElementById("newPtNext").onclick=function(){newPtOrderdetailblood()};
+}
+
+/**
+ * Show Order Details Page for Blood Spectrometer
+ * 
+ */
+function orderdetailblood() {
+    showTable("setOrderDetailBlood");
+    document.getElementById("title").innerHTML = "STEP 2: ORDER DETAIL BLOOD";
+    document.getElementById("patientIdSide").value = document.getElementById("idSearch").value;
+    document.getElementById("givenNameSide").value = document.getElementById("nameSearch").value;
+}
+
+/**
+ * Shows Admin Dashboard
+ * 
+ */
+function adminDashboard() {
+    showTable("adminContent");
+    document.getElementById("title").innerHTML = "Admin Dashboard";
+}
+
+/**
+ * Shows Factory Calibration Screen with different options of Factory Calibrations
+ * 
+ */
+function factoryCalibrateContent() {
+    showTable("factoryCalibrateContent");
+    document.getElementById("title").innerHTML = "Factory Calibration";
+}
+
+/**
+ * Refreshes the web page
+ * @fires window.location.reload
+ * 
+ */
+function refreshPage(){
+	window.location.reload(true);
+}
+
+
+/**
+ * Toggles the top navigation icons between active and disabled
+ * @param {boolean} enable if True, activates the top navigation icons, else disables them
+ * 
+ */
+function toggleMainNavIcons(enable){
+	if(enable){
+		document.getElementById("mainAdminIcon").classList.remove("disabled");
+		document.getElementById("backbutton").classList.remove("disabled");
+		document.getElementById("mainHomeIcon").classList.remove("disabled");
+		/*document.getElementById("mainUserIcon").classList.remove("disabled");*/
+	}else{
+		document.getElementById("mainAdminIcon").classList.add("disabled");
+		document.getElementById("backbutton").classList.add("disabled");
+		document.getElementById("mainHomeIcon").classList.add("disabled");
+		/*document.getElementById("mainUserIcon").classList.add("disabled");*/
+	}
+}</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#adminDashboard">adminDashboard</a></li><li><a href="global.html#back">back</a></li><li><a href="global.html#caf2CalibrationData">caf2CalibrationData</a></li><li><a href="global.html#caf2StatusSource">caf2StatusSource</a></li><li><a href="global.html#calibrateScreenOne">calibrateScreenOne</a></li><li><a href="global.html#cameraCalibrate">cameraCalibrate</a></li><li><a href="global.html#changeColorByStatus">changeColorByStatus</a></li><li><a href="global.html#checkingStatus">checkingStatus</a></li><li><a href="global.html#checkSessionTimeout">checkSessionTimeout</a></li><li><a href="global.html#checkStatus">checkStatus</a></li><li><a href="global.html#checkVersion">checkVersion</a></li><li><a href="global.html#collapseDesc">collapseDesc</a></li><li><a href="global.html#continueSegment">continueSegment</a></li><li><a href="global.html#createNewPatients">createNewPatients</a></li><li><a href="global.html#descInputChange">descInputChange</a></li><li><a href="global.html#displayResults">displayResults</a></li><li><a href="global.html#drawGraphs">drawGraphs</a></li><li><a href="global.html#elapsedTime">elapsedTime</a></li><li><a href="global.html#expandDesc">expandDesc</a></li><li><a href="global.html#exsistPt">exsistPt</a></li><li><a href="global.html#factoryCalibrateContent">factoryCalibrateContent</a></li><li><a href="global.html#get24HourDateTime">get24HourDateTime</a></li><li><a href="global.html#getCaf2Calibration">getCaf2Calibration</a></li><li><a href="global.html#getImage">getImage</a></li><li><a href="global.html#getLastCalibration">getLastCalibration</a></li><li><a href="global.html#getNewVersion">getNewVersion</a></li><li><a href="global.html#isNumeric">isNumeric</a></li><li><a href="global.html#isPositiveNumber">isPositiveNumber</a></li><li><a href="global.html#mealDurationChange">mealDurationChange</a></li><li><a href="global.html#mealTimeChange">mealTimeChange</a></li><li><a href="global.html#newpatient">newpatient</a></li><li><a href="global.html#newPatientReset">newPatientReset</a></li><li><a href="global.html#opDahboardDisplay">opDahboardDisplay</a></li><li><a href="global.html#orderdetailblood">orderdetailblood</a></li><li><a href="global.html#pad">pad</a></li><li><a href="global.html#postRunNotes">postRunNotes</a></li><li><a href="global.html#printResults">printResults</a></li><li><a href="global.html#procedureChange">procedureChange</a></li><li><a href="global.html#ranProcedureOnce">ranProcedureOnce</a></li><li><a href="global.html#recalibratebutton">recalibratebutton</a></li><li><a href="global.html#refreshPage">refreshPage</a></li><li><a href="global.html#resetSearch">resetSearch</a></li><li><a href="global.html#runningSource">runningSource</a></li><li><a href="global.html#RunTest">RunTest</a></li><li><a href="global.html#saveCaf2Calibration">saveCaf2Calibration</a></li><li><a href="global.html#searchPatient">searchPatient</a></li><li><a href="global.html#searchPt">searchPt</a></li><li><a href="global.html#selectSearchNew">selectSearchNew</a></li><li><a href="global.html#selectSearchVital">selectSearchVital</a></li><li><a href="global.html#setOrderDisplay">setOrderDisplay</a></li><li><a href="global.html#showMonitoring">showMonitoring</a></li><li><a href="global.html#showTable">showTable</a></li><li><a href="global.html#showWaveLengthCalibration">showWaveLengthCalibration</a></li><li><a href="global.html#shutdownMonitoring">shutdownMonitoring</a></li><li><a href="global.html#slectedPatientnext">slectedPatientnext</a></li><li><a href="global.html#spec">spec</a></li><li><a href="global.html#specimenChange">specimenChange</a></li><li><a href="global.html#stack">stack</a></li><li><a href="global.html#statusUpdates">statusUpdates</a></li><li><a href="global.html#toggleMainNavIcons">toggleMainNavIcons</a></li><li><a href="global.html#vitalDisplay">vitalDisplay</a></li><li><a href="global.html#vitalHistory">vitalHistory</a></li><li><a href="global.html#vitalRecords">vitalRecords</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Tue May 01 2018 17:13:39 GMT-0400 (Eastern Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: systemCheck.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: systemCheck.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @file
+ * Provides utility functions to monitor and check different statuses of the software and spectrometer
+ */
+
+
+/**
+ * Gets the server build timestamp and compares it with the local build timestamp.
+ * If current version is older than server, it calls getNewVersion()
+ */
+function checkVersion(){
+	
+	 $.ajax({
+	    type: "GET",
+	    url: '/getServerVersion',
+	    cache: false,
+	    success: function (serverVersion) {
+	    	
+	    	var localVersion = document.getElementById("localVersion").value;
+	    	if(localVersion &lt; serverVersion){
+	         getNewVersion();
+	        }
+	    },
+	    error: function (msg) {
+	     
+	    }
+	 });
+	}
+
+/**
+ * Checks for Session Time out, and redirects back to login.html if session has time out.
+ * 
+ */
+function checkSessionTimeout() {
+    $.ajax({
+        type: "POST",
+        url: '/checkSessionTimeout',
+        success: function(result) {
+            if (result == "false") {
+                window.location.href = 'login.html';
+            }
+        },
+        error: function(msg) {
+            window.location.href = 'login.html';
+        }
+    });
+}
+
+/**
+ * Starts the download and replace of new build from server. 
+ * Shows a modal dialog that shows the status of download.
+ * 
+ */
+function getNewVersion(){
+	 
+	 var modalDiv = document.createElement("div");
+	 document.getElementById("body_id").appendChild(modalDiv);
+	 modalDiv.id="updateModal";
+	 modalDiv.classList.add("modal");
+	 modalDiv.style.display = 'block';
+	 modalDiv.style.textAlign = '-webkit-center';
+	 var modalContent = document.createElement("div");
+	 modalDiv.appendChild(modalContent);
+	 modalContent.id="updateModalContent";
+	 modalContent.classList.add("modal-content");
+	 var close = document.createElement("span");
+	 modalContent.appendChild(close);
+	 close.innerHTML = "×";
+	 close.classList.add("close");
+	 var text = document.createElement("p");
+	 modalContent.appendChild(text);
+	 text.id="updateText";
+	 text.innerHTML = "Downloading new software.";
+	 modalContent.style.backgroundColor = "#e5e5e5";
+	 modalContent.style.width = '25%';
+	 modalContent.style.position = 'initial';
+	 $.ajax({
+	    type: "GET",
+	    url: '/getNewVersion',
+	    success: function (serverVersion) {
+	     submitError=true;
+	     driverFail=true;
+	     errorMessage=false;
+	     clearInterval(timer);
+	     var errorTime=12000;
+	     document.getElementById("updateText").innerHTML="Software is updating.";
+	     console.log("updating software.");
+	     window.setTimeout(function(){
+	      
+	      location.reload();
+	     },12000);
+	    },
+	    error: function (msg) {
+	     
+	     document.getElementById("updateText").innerHTML="Error updating software.";
+	     console.log("Error updating software.");
+	    }
+	 });
+	}
+
+
+/**
+ * A variable in the global namespace. Used by function checkStatus() to ensure that it cannot be run while it is already running.
+ * @type {boolean}
+ */
+var checkingStatus = false;
+
+/**
+ * Checks if the spectrometer is connected and ready. If not then it shows the System Check Screen, and if yes it shows the Operator Home Page.
+ * It uses global variable checkingStatus to ensure that it cannot be run while it is already running.
+ * 
+ */
+function checkStatus(){
+	
+	 if(checkingStatus) return;
+	 checkingStatus = true;
+	 $.get('/checkStatus', function(data, status) {
+	  document.getElementById("connectionStatus").innerHTML = data.connection;
+	  document.getElementById("powerStatus").innerHTML = data.power;
+	  document.getElementById("componentStatus").innerHTML = data.component;
+	  toggleMainNavIcons(data.ready)
+	  if(data.ready == false){
+	   document.getElementById("title").innerHTML="SYSTEM CHECK";
+	   showTable("systemcheck");
+	   document.getElementById("systemrunning").style.display="none";
+	  }
+	  if(data.ready == true){
+		  document.getElementById("systemrunning").style.display="block";
+		  showTable("OpDashboard");
+		  getLastCalibration();
+	   
+	  }
+	
+	 })
+	 .fail(function(data){
+	 	console.log("CHECK STATUS FAILED")
+	 	console.log(data)
+	})
+	 .always(function(){
+	   checkingStatus = false;
+	  });
+	}
+
+
+/**
+ * Checks the time of the last wavelength calibration done on the connected spectrometer.
+ * If it is more than 24 hours then it disables the Run Test (Skin/Blood) button. 
+ * 
+ */
+function getLastCalibration(){
+	console.log("GETTING LAST CALIBRATION")
+	 
+	 $.ajax({
+	    type: "GET",
+	    url: '/getLastCalibration',
+	    cache: false,
+	    success: function (data) {
+	     document.getElementById("calibrationDate").innerHTML=data[1];
+	     document.getElementById("calibrateTime").innerHTML=data[2];
+	     document.getElementById("calibrateElapsed").innerHTML=data[3];
+	     if(data[4] == "1"){
+	      if(document.getElementById("runTestBlood")) document.getElementById("runTestBlood").classList.add("disabled");
+	      if(document.getElementById("runTestSkin")) document.getElementById("runTestSkin").classList.add("disabled");
+	     }else{
+	      if(document.getElementById("runTestBlood")) document.getElementById("runTestBlood").classList.remove("disabled");
+	      if(document.getElementById("runTestSkin")) document.getElementById("runTestSkin").classList.remove("disabled");
+	     }
+	    },
+	    error: function (msg) {
+	     console.log("getLastCalibration error: " + msg);
+	     console.log("GET LAST CALIB FAILED")
+	  	console.log(msg)
+	    }
+	 });
+	}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#adminDashboard">adminDashboard</a></li><li><a href="global.html#back">back</a></li><li><a href="global.html#caf2CalibrationData">caf2CalibrationData</a></li><li><a href="global.html#caf2StatusSource">caf2StatusSource</a></li><li><a href="global.html#calibrateScreenOne">calibrateScreenOne</a></li><li><a href="global.html#cameraCalibrate">cameraCalibrate</a></li><li><a href="global.html#changeColorByStatus">changeColorByStatus</a></li><li><a href="global.html#checkingStatus">checkingStatus</a></li><li><a href="global.html#checkSessionTimeout">checkSessionTimeout</a></li><li><a href="global.html#checkStatus">checkStatus</a></li><li><a href="global.html#checkVersion">checkVersion</a></li><li><a href="global.html#collapseDesc">collapseDesc</a></li><li><a href="global.html#continueSegment">continueSegment</a></li><li><a href="global.html#createNewPatients">createNewPatients</a></li><li><a href="global.html#descInputChange">descInputChange</a></li><li><a href="global.html#displayResults">displayResults</a></li><li><a href="global.html#drawGraphs">drawGraphs</a></li><li><a href="global.html#elapsedTime">elapsedTime</a></li><li><a href="global.html#expandDesc">expandDesc</a></li><li><a href="global.html#exsistPt">exsistPt</a></li><li><a href="global.html#factoryCalibrateContent">factoryCalibrateContent</a></li><li><a href="global.html#get24HourDateTime">get24HourDateTime</a></li><li><a href="global.html#getCaf2Calibration">getCaf2Calibration</a></li><li><a href="global.html#getImage">getImage</a></li><li><a href="global.html#getLastCalibration">getLastCalibration</a></li><li><a href="global.html#getNewVersion">getNewVersion</a></li><li><a href="global.html#isNumeric">isNumeric</a></li><li><a href="global.html#isPositiveNumber">isPositiveNumber</a></li><li><a href="global.html#mealDurationChange">mealDurationChange</a></li><li><a href="global.html#mealTimeChange">mealTimeChange</a></li><li><a href="global.html#newpatient">newpatient</a></li><li><a href="global.html#newPatientReset">newPatientReset</a></li><li><a href="global.html#opDahboardDisplay">opDahboardDisplay</a></li><li><a href="global.html#orderdetailblood">orderdetailblood</a></li><li><a href="global.html#pad">pad</a></li><li><a href="global.html#postRunNotes">postRunNotes</a></li><li><a href="global.html#printResults">printResults</a></li><li><a href="global.html#procedureChange">procedureChange</a></li><li><a href="global.html#ranProcedureOnce">ranProcedureOnce</a></li><li><a href="global.html#recalibratebutton">recalibratebutton</a></li><li><a href="global.html#refreshPage">refreshPage</a></li><li><a href="global.html#resetSearch">resetSearch</a></li><li><a href="global.html#runningSource">runningSource</a></li><li><a href="global.html#RunTest">RunTest</a></li><li><a href="global.html#saveCaf2Calibration">saveCaf2Calibration</a></li><li><a href="global.html#searchPatient">searchPatient</a></li><li><a href="global.html#searchPt">searchPt</a></li><li><a href="global.html#selectSearchNew">selectSearchNew</a></li><li><a href="global.html#selectSearchVital">selectSearchVital</a></li><li><a href="global.html#setOrderDisplay">setOrderDisplay</a></li><li><a href="global.html#showMonitoring">showMonitoring</a></li><li><a href="global.html#showTable">showTable</a></li><li><a href="global.html#showWaveLengthCalibration">showWaveLengthCalibration</a></li><li><a href="global.html#shutdownMonitoring">shutdownMonitoring</a></li><li><a href="global.html#slectedPatientnext">slectedPatientnext</a></li><li><a href="global.html#spec">spec</a></li><li><a href="global.html#specimenChange">specimenChange</a></li><li><a href="global.html#stack">stack</a></li><li><a href="global.html#statusUpdates">statusUpdates</a></li><li><a href="global.html#toggleMainNavIcons">toggleMainNavIcons</a></li><li><a href="global.html#vitalDisplay">vitalDisplay</a></li><li><a href="global.html#vitalHistory">vitalHistory</a></li><li><a href="global.html#vitalRecords">vitalRecords</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Tue May 01 2018 17:13:39 GMT-0400 (Eastern Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: monitoring.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: monitoring.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @file 
+ * Provides monitoring events and their displays monitored parameters on run screens
+ */
+
+
+/**
+ * Global Variable runningSource is used to store Java Server Side Event Source
+ * @type {ServerSideEventSource}
+ */
+var runningSource; 
+
+/**
+ * Global Variable elapsedTime is used by showMonitoring when monitoring elapsed time
+ * @type {int}
+ */
+var elapsedTime;
+
+/** 
+ * Function to start Spectrometer monitoring threads
+ * This function calls the controller startMonitoringServices with a unique id to maintain session. The controller
+ * starts multiple threads that return values as Java MessageSender Events and based on the returned String, we separate 
+ * them into different monitoring parameters. Returned values from MessageSender is of the form "XX|ABC|DEF ..." where XX is
+ * an arbitrary number that maps to the parameter being monitored and the rest of '|' pipe separated values are different values
+ * corresponding to that parameter
+ * The current parameter mappings for XX are:
+ * 00: Elapsed Time
+ * 01: Laser Temperature in C
+ * 02: TEC Temperature in C
+ * 03: Laser Enable
+ * 10: CaF2 Peak Photon Count
+ * 06: PD Power (Experimental) (Displays in Console for Now)
+ * 
+ * @param {string} id A unique ID that can be used to establish a session between showMonitoring and the EventSource from startMonitoringServices
+ * @param {string} elementID The suffix to the HTMLElements where the parameters are to be displayed
+ * 
+ * @fires JavaServerSideEvent
+ *  
+ */
+function showMonitoring(id, elementID){
+	
+	
+	if (runningSource) {
+		runningSource.close();
+    }
+	
+	var spectraMonitoringIndex = 0;
+
+    var uuid = id;
+    var source = new EventSource('/startMonitoringServices?id=' + uuid);
+    runningSource = source;
+    elapsedTime = 0;
+    
+    source.onerror = function(e) {
+    	console.log("showMonitoring ==> source.onerror");
+    	source.close();
+    }
+    source.onmessage =  function(event) {
+    	var string = event.data;
+    	
+    	switch(string.substring(0,2)){
+    		case "00":
+    			elapsedTime = elapsedTime +  1;
+    			document.getElementById("dashboardElapsedTime"+elementID).innerHTML = "00:00:" + elapsedTime;
+    			break;
+    		case "01":
+    			string = string.split("|");
+    			document.getElementById("dashboardLaserTemp"+elementID).innerHTML = string[1] + " / " + string[3];
+    			changeColorByStatus("dashboardLaserTemp"+elementID, string[4])
+    			break;
+    		case "02":
+    			string = string.split("|");
+    			document.getElementById("dashboardTECTemp"+elementID).innerHTML = string[1] + " / " + string[3];
+    			changeColorByStatus("dashboardTECTemp"+elementID, string[4])
+    			break;
+    		case "03":
+    			string = string.split("|");
+    			if(string[1] == "true"){
+    				document.getElementById("dashboardLaser"+elementID).innerHTML = '&lt;img id="imgLaserEnableToggle" class="img" src="/images/laserOn.png" style="height:25px;"/>'
+    			}else{
+    				document.getElementById("dashboardLaser"+elementID).innerHTML = '&lt;img id="imgLaserEnableToggle" class="img" src="/images/laserOff.png" style="height:25px;"/>'
+    			}
+    			break;
+    		case "10":
+    			string = string.split("|");
+    			
+    			console.log(++spectraMonitoringIndex + ".\tPHOTON COUNT AT MONITORING POINT : " + string[1] + " \t PEAK : " + string [2] + " \t Integration Time : " + string[3])
+    			break;
+    		case "06":
+    			console.log("PD POWER : " + string)
+    			break;
+    		default:
+    			break;
+    	}
+    }
+    source.onopen = function(e) {
+    	console.log("Source OPEN")
+    };
+}
+
+
+/**
+ * Shuts down monitoring threads associated with passed id parameter
+ * 
+ * @param {string} id A unique ID that was used to establish a session between showMonitoring and the EventSource created in showMonitoring()
+ * @return {boolean} Returns true/false based on success of the function  
+ */
+function shutdownMonitoring(id){
+	$.ajax({
+        data: {'id': id},
+        type: 'POST',
+        url: '/shutdownMonitoringServices',
+        cache: false,
+        success: function(result, textStatus, jqXHR) {
+        	return true;
+        },
+        error: function(d, responseText, error) {
+        	return false;
+        }
+	});
+}
+
+/**
+ * Changes the color of element with id elementTag+"Box" according to parameter status 
+ * 
+ * @param {string} elementTag The suffix of HTMLElement ID where color has to be changed. These id is then appended with "Box" to get the full element id
+ * @param {string} status Pre-defined strings that are mapped to color
+ * 
+ */
+function changeColorByStatus(elementTag, status){
+	elementTag = elementTag + "Box";
+	switch (status) {
+	case "0":
+		document.getElementById(elementTag).style.backgroundColor = "#2ecc71"; 
+		break;
+	case "1":
+		document.getElementById(elementTag).style.backgroundColor = "#f1c40f";
+		break;
+	case "2":
+		document.getElementById(elementTag).style.backgroundColor = "#e67e22";
+		break;
+	case "3":
+		document.getElementById(elementTag).style.backgroundColor = "#EA2027";
+		break;
+	default:
+		break;
+	}
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#adminDashboard">adminDashboard</a></li><li><a href="global.html#back">back</a></li><li><a href="global.html#caf2CalibrationData">caf2CalibrationData</a></li><li><a href="global.html#caf2StatusSource">caf2StatusSource</a></li><li><a href="global.html#calibrateScreenOne">calibrateScreenOne</a></li><li><a href="global.html#cameraCalibrate">cameraCalibrate</a></li><li><a href="global.html#changeColorByStatus">changeColorByStatus</a></li><li><a href="global.html#checkingStatus">checkingStatus</a></li><li><a href="global.html#checkSessionTimeout">checkSessionTimeout</a></li><li><a href="global.html#checkStatus">checkStatus</a></li><li><a href="global.html#checkVersion">checkVersion</a></li><li><a href="global.html#collapseDesc">collapseDesc</a></li><li><a href="global.html#continueSegment">continueSegment</a></li><li><a href="global.html#createNewPatients">createNewPatients</a></li><li><a href="global.html#descInputChange">descInputChange</a></li><li><a href="global.html#displayResults">displayResults</a></li><li><a href="global.html#drawGraphs">drawGraphs</a></li><li><a href="global.html#elapsedTime">elapsedTime</a></li><li><a href="global.html#expandDesc">expandDesc</a></li><li><a href="global.html#exsistPt">exsistPt</a></li><li><a href="global.html#factoryCalibrateContent">factoryCalibrateContent</a></li><li><a href="global.html#get24HourDateTime">get24HourDateTime</a></li><li><a href="global.html#getCaf2Calibration">getCaf2Calibration</a></li><li><a href="global.html#getImage">getImage</a></li><li><a href="global.html#getLastCalibration">getLastCalibration</a></li><li><a href="global.html#getNewVersion">getNewVersion</a></li><li><a href="global.html#isNumeric">isNumeric</a></li><li><a href="global.html#isPositiveNumber">isPositiveNumber</a></li><li><a href="global.html#mealDurationChange">mealDurationChange</a></li><li><a href="global.html#mealTimeChange">mealTimeChange</a></li><li><a href="global.html#newpatient">newpatient</a></li><li><a href="global.html#newPatientReset">newPatientReset</a></li><li><a href="global.html#opDahboardDisplay">opDahboardDisplay</a></li><li><a href="global.html#orderdetailblood">orderdetailblood</a></li><li><a href="global.html#pad">pad</a></li><li><a href="global.html#postRunNotes">postRunNotes</a></li><li><a href="global.html#printResults">printResults</a></li><li><a href="global.html#procedureChange">procedureChange</a></li><li><a href="global.html#ranProcedureOnce">ranProcedureOnce</a></li><li><a href="global.html#recalibratebutton">recalibratebutton</a></li><li><a href="global.html#refreshPage">refreshPage</a></li><li><a href="global.html#resetSearch">resetSearch</a></li><li><a href="global.html#runningSource">runningSource</a></li><li><a href="global.html#RunTest">RunTest</a></li><li><a href="global.html#saveCaf2Calibration">saveCaf2Calibration</a></li><li><a href="global.html#searchPatient">searchPatient</a></li><li><a href="global.html#searchPt">searchPt</a></li><li><a href="global.html#selectSearchNew">selectSearchNew</a></li><li><a href="global.html#selectSearchVital">selectSearchVital</a></li><li><a href="global.html#setOrderDisplay">setOrderDisplay</a></li><li><a href="global.html#showMonitoring">showMonitoring</a></li><li><a href="global.html#showTable">showTable</a></li><li><a href="global.html#showWaveLengthCalibration">showWaveLengthCalibration</a></li><li><a href="global.html#shutdownMonitoring">shutdownMonitoring</a></li><li><a href="global.html#slectedPatientnext">slectedPatientnext</a></li><li><a href="global.html#spec">spec</a></li><li><a href="global.html#specimenChange">specimenChange</a></li><li><a href="global.html#stack">stack</a></li><li><a href="global.html#statusUpdates">statusUpdates</a></li><li><a href="global.html#toggleMainNavIcons">toggleMainNavIcons</a></li><li><a href="global.html#vitalDisplay">vitalDisplay</a></li><li><a href="global.html#vitalHistory">vitalHistory</a></li><li><a href="global.html#vitalRecords">vitalRecords</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Tue May 01 2018 17:13:39 GMT-0400 (Eastern Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

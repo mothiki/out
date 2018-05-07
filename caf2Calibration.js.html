@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: caf2Calibration.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: caf2Calibration.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @file
+ * Provides all CaF2 calibration functions
+ */
+
+/**
+ * Global Variable caf2CalibrationData is used to store information between getCaf2Calibration() and 
+ * saveCaf2Calibration()
+ * @type {object}
+ */
+var caf2CalibrationData;
+
+/**
+ * Global Variable caf2StatusSource is used to store Java Server Side Event Source
+ * @type {ServerSideEventSource}
+ */
+var caf2StatusSource;
+
+/**
+ * Show the run screen for Blank CaF2/DN Calibration. 
+ * It also shows the status updates of the run, and after the run it gives an option to Save and shows the result chart
+ * 
+ */
+function getCaf2Calibration(){
+	showTable("darkNoiseContent");
+	document.getElementById("title").innerHTML="Capturing CaF2 / DN Reference";
+	document.getElementById("caf2DnCalibrationStatus").innerHTML = ""
+	document.getElementById("darkNoisechartContainer").style.display= "none";
+	document.getElementById("darkNioseLoader").style.display= "block";
+	document.getElementById("darkNoiseChartsDiv").style.display= "none";
+	document.getElementById("saveCaF2CalibrationBtn").classList.add("disabled");
+	document.getElementById("cancelCaF2CalibrationBtn").classList.remove("disabled");
+	
+	var uuid = new Date().valueOf();
+	showMonitoring(uuid, 3);
+	
+	if (caf2StatusSource) {
+		caf2StatusSource.close();
+    }
+	var uuid2 = new Date().valueOf();
+    var source = new EventSource('/registerStatusEmitter?id=' + uuid2);
+    caf2StatusSource = source;
+    caf2StatusSource.onerror = function(e) {
+    	caf2StatusSource.close();
+    }
+    caf2StatusSource.onmessage =  function(event) {
+    	document.getElementById("caf2DnCalibrationStatus").innerHTML = event.data;
+    }
+    caf2StatusSource.onopen = function(e){
+    	$.ajax({
+            data: {'emitterId': uuid2},
+            type: 'POST',
+            url: '/getCaF2Calibration',
+            cache: false,
+            success: function(data, status) {
+
+    			// console.log(data);
+    			caf2CalibrationData = data;
+    			data = data[1]
+    			document.getElementById("darkNoiseChartsDiv").style.display= "block";
+    			document.getElementById("darkNioseLoader").style.display= "none";
+    			document.getElementById("darkNoisechartContainer").style.display= "block";
+    			
+    			
+    			
+    			var integrationTimes = Object.keys(data);
+    			integrationTimes.sort(function(a, b){return a - b});
+    			
+    			var chartDataSets = [];
+    			var dataPoints = [];
+    			for(var index=0; index&lt;integrationTimes.length; index++){
+    				var wavenumbers = data[integrationTimes[index]].wavenumbers;
+    				var dataPoints = [];
+    				for(var wIndex = 0; wIndex &lt; wavenumbers.length; wIndex++){
+    					dataPoints.push({
+    						x: wavenumbers[wIndex].wavenum,
+    						y: wavenumbers[wIndex].photon_count
+    					});
+    				}
+    				var dataSeries = {
+    						type: "line",
+    						markerSize: 1,
+    						showInLegend: true,
+    						dataPoints: dataPoints,
+    						legendText: "CaF2 Calibration"
+    						
+    				};
+    				
+    				chartDataSets.push(dataSeries);
+
+    			}
+    						
+    			var div = document.getElementById("darkNoisechartContainer");	
+    			darkNoiseChart = new CanvasJS.Chart(div, {
+    				axisX:{
+    				    title: "Wavelength",
+    				    titleFontSize: 12,
+    				    titleFontFamily: "arial"
+    				  },
+    				  axisY:{
+    				    title: "Photon Count",
+    				    titleFontSize: 12,
+    				    titleFontFamily: "arial"
+    				   },
+    				  animationEnabled: true,
+    				  zoomEnabled: true,
+    				  zoomType: "xy",
+    			      title:{
+    			       text: "Dark Noise",
+    				   fontSize: 12,
+    				   fontFamily: "arial",
+    				   fontStyle: "bold"
+    			      },
+    			      data: chartDataSets,
+    			});
+    			darkNoiseChart.render();
+    			document.getElementById("saveCaF2CalibrationBtn").classList.remove("disabled");
+    			document.getElementById("cancelCaF2CalibrationBtn").classList.add("disabled");
+    			shutdownMonitoring(uuid);
+            }
+    	});
+    	/*$.get("/getCaF2Calibration",function(data,status){
+		 })*/
+    }
+	
+		 
+}
+
+/**
+ * Saves caf2CalibrationData data and then disables the Save button
+ * 
+ */
+function saveCaf2Calibration(){
+	/*var spectrometerId = caf2CalibrationData[0];
+	var integrationTimeSpectrumMap = caf2CalibrationData[1]*/
+	$.ajax({
+     url: "/saveCaF2CalibrationData",
+     type: "POST",
+     success: function(response){
+    	 
+    	 document.getElementById("saveCaF2CalibrationBtn").classList.add("disabled");
+    	 alert("CaF2 Calibration Data Saved");
+     }
+	});
+	
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#adminDashboard">adminDashboard</a></li><li><a href="global.html#back">back</a></li><li><a href="global.html#caf2CalibrationData">caf2CalibrationData</a></li><li><a href="global.html#caf2StatusSource">caf2StatusSource</a></li><li><a href="global.html#calibrateScreenOne">calibrateScreenOne</a></li><li><a href="global.html#cameraCalibrate">cameraCalibrate</a></li><li><a href="global.html#changeColorByStatus">changeColorByStatus</a></li><li><a href="global.html#checkingStatus">checkingStatus</a></li><li><a href="global.html#checkSessionTimeout">checkSessionTimeout</a></li><li><a href="global.html#checkStatus">checkStatus</a></li><li><a href="global.html#checkVersion">checkVersion</a></li><li><a href="global.html#collapseDesc">collapseDesc</a></li><li><a href="global.html#continueSegment">continueSegment</a></li><li><a href="global.html#createNewPatients">createNewPatients</a></li><li><a href="global.html#descInputChange">descInputChange</a></li><li><a href="global.html#displayResults">displayResults</a></li><li><a href="global.html#drawGraphs">drawGraphs</a></li><li><a href="global.html#elapsedTime">elapsedTime</a></li><li><a href="global.html#expandDesc">expandDesc</a></li><li><a href="global.html#exsistPt">exsistPt</a></li><li><a href="global.html#factoryCalibrateContent">factoryCalibrateContent</a></li><li><a href="global.html#get24HourDateTime">get24HourDateTime</a></li><li><a href="global.html#getCaf2Calibration">getCaf2Calibration</a></li><li><a href="global.html#getImage">getImage</a></li><li><a href="global.html#getLastCalibration">getLastCalibration</a></li><li><a href="global.html#getNewVersion">getNewVersion</a></li><li><a href="global.html#isNumeric">isNumeric</a></li><li><a href="global.html#isPositiveNumber">isPositiveNumber</a></li><li><a href="global.html#mealDurationChange">mealDurationChange</a></li><li><a href="global.html#mealTimeChange">mealTimeChange</a></li><li><a href="global.html#newpatient">newpatient</a></li><li><a href="global.html#newPatientReset">newPatientReset</a></li><li><a href="global.html#opDahboardDisplay">opDahboardDisplay</a></li><li><a href="global.html#orderdetailblood">orderdetailblood</a></li><li><a href="global.html#pad">pad</a></li><li><a href="global.html#postRunNotes">postRunNotes</a></li><li><a href="global.html#printResults">printResults</a></li><li><a href="global.html#procedureChange">procedureChange</a></li><li><a href="global.html#ranProcedureOnce">ranProcedureOnce</a></li><li><a href="global.html#recalibratebutton">recalibratebutton</a></li><li><a href="global.html#refreshPage">refreshPage</a></li><li><a href="global.html#resetSearch">resetSearch</a></li><li><a href="global.html#runningSource">runningSource</a></li><li><a href="global.html#RunTest">RunTest</a></li><li><a href="global.html#saveCaf2Calibration">saveCaf2Calibration</a></li><li><a href="global.html#searchPatient">searchPatient</a></li><li><a href="global.html#searchPt">searchPt</a></li><li><a href="global.html#selectSearchNew">selectSearchNew</a></li><li><a href="global.html#selectSearchVital">selectSearchVital</a></li><li><a href="global.html#setOrderDisplay">setOrderDisplay</a></li><li><a href="global.html#showMonitoring">showMonitoring</a></li><li><a href="global.html#showTable">showTable</a></li><li><a href="global.html#showWaveLengthCalibration">showWaveLengthCalibration</a></li><li><a href="global.html#shutdownMonitoring">shutdownMonitoring</a></li><li><a href="global.html#slectedPatientnext">slectedPatientnext</a></li><li><a href="global.html#spec">spec</a></li><li><a href="global.html#specimenChange">specimenChange</a></li><li><a href="global.html#stack">stack</a></li><li><a href="global.html#statusUpdates">statusUpdates</a></li><li><a href="global.html#toggleMainNavIcons">toggleMainNavIcons</a></li><li><a href="global.html#vitalDisplay">vitalDisplay</a></li><li><a href="global.html#vitalHistory">vitalHistory</a></li><li><a href="global.html#vitalRecords">vitalRecords</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Tue May 01 2018 17:13:39 GMT-0400 (Eastern Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

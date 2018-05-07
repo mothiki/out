@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: runPatient.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: runPatient.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @file
+ * Provides all functions for CREATE, SEARCH and SELECT patients during a Run Flow 
+ */
+
+/**
+ * Is fired when User enters anything in the Patient Search Filters (FName, LName, DOB), so that the search result is ready to be displayed 
+ * 
+ */ 
+function searchPatient() {
+        var name = document.getElementById("nameSearch").value;
+        var date = document.getElementById("dateSearch").value;
+        var lastName = document.getElementById("lastNameSearch").value;
+        
+        nameSearchVal = name
+        dateSearchVal = date
+        lastNameSearchVal = lastName
+        document.getElementById("selectPatient").style.display = "none";
+        document.getElementById("searchPtButton").innerHTML = "Search";
+        document.getElementById("searchPtButtonImg").onclick = searchPt;
+        $.get("/searchPatient", {
+           
+            name: name,
+            date: date,
+            lastName: lastName
+        }, function(data, status) {
+            var tbody = document.getElementById('pFilterResult').getElementsByTagName("tbody")[0];
+            tbody.innerHTML = "";
+
+            for (i = 0; i &lt; data.length; i++) {
+                var row = tbody.insertRow(-1);
+                row.setAttribute("data-patientId", "P" + pad(data[i].subjectId, 6));
+                row.setAttribute("data-dob", data[i].dob);
+                row.setAttribute("data-name", data[i].givenname);
+                row.setAttribute("data-lastname", data[i].lastname);
+                row.setAttribute("class", "selectTableTr");
+                row.id = data[i].subjectId;
+                /* row.insertCell(-1).innerHTML = data[i].name; */
+                if (data[i].givenname == null || data[i].givenname == "") {
+                    row.insertCell(-1).innerHTML = "";
+                } else {
+                    row.insertCell(-1).innerHTML = data[i].givenname.toUpperCase();
+                }
+                if (data[i].lastname == null || data[i].lastname == "") {
+                    row.insertCell(-1).innerHTML = "";
+                } else {
+                    row.insertCell(-1).innerHTML = data[i].lastname.toUpperCase();
+                }
+                if (data[i].dob == null || data[i].dob == "") {
+                    row.insertCell(-1).innerHTML = "";
+                } else {
+                    row.insertCell(-1).innerHTML = (new Date(data[i].dob)).toDateString().substring(4);
+                }
+                row.insertCell(-1).innerHTML = get24HourDateTime(new Date(data[i].creationDate))
+                
+
+                row.onclick = function(data) {
+                    var sId = $(this).attr('id');
+                    selectSearchNew(this.getAttribute("data-patientId"), this.getAttribute("data-dob"), this.getAttribute("data-name"), this.getAttribute("data-lastname"), sId);
+                    //selectSearchNew(sId);
+                    selectedRow = document.getElementsByClassName("selectTableTr selected");
+                    if (selectedRow.length > 0) {
+                        selectedRow[0].classList.remove("selected");
+                    }
+                    this.classList.add("selected");
+                }
+
+            }
+
+
+            if (Array === data.constructor) {
+                var x = document.getElementById("selectPatient");
+                for (i = x.length - 1; i >= 0; i--) {
+                    x.remove(i);
+                }
+                for (i = 0; i &lt; data.length; ++i) {
+                    var s = document.createElement("option");
+                    s.text = data[i].name;
+                    if (data[i].givenname &amp;&amp; data[i].givenname != "") {
+                        s.text += " (" + data[i].givenname + ")";
+                    }
+                    s.text += ", " + (new Date(data[i].dob)).toDateString().substring(4);
+                    s.value = data[i].name;
+
+                    s.setAttribute("data-name", data[i].givenname);
+                    s.setAttribute("data-dob", data[i].dob);
+                    s.setAttribute("data-lastname", data[i].lastname);
+                }
+
+
+            } else {
+                location.reload();
+            }
+        });
+    }
+
+
+/**
+ * Resets Patient Search
+ * 
+ */
+function resetSearch() {
+    document.getElementById("nameSearch").value = "";
+    document.getElementById("lastNameSearch").value = "";
+    document.getElementById("idSearch").value = "";
+    document.getElementById("dateSearch").value = "";
+    document.getElementById("selectPatient").style.display = "none";
+    document.getElementById("searchPtButton").innerHTML = "Search";
+    document.getElementById("searchPtButtonImg").onclick = searchPt;
+    document.getElementById("searchRowId").value = "";
+    
+
+}
+
+/**
+ * Is Called by function createNewPatients() after saving a new patient successfully.
+ * This function sets the search fields to the new patients information and also prepares other required fields
+ * @param {String} patientId Padded Patient's ID
+ * @param {int} dob Date of Birth
+ * @param {String} name First/Given Name of Patient
+ * @param {String} lastname Last Name of Patient
+ * @param {int} sId Un-padded numeric Patient's ID
+ * 
+ */
+function selectSearchNew(patientId, dob, name, lastname, sId) {
+    document.getElementById("nameSearch").value = name.toUpperCase();
+    document.getElementById("lastNameSearch").value = lastname.toUpperCase();
+    document.getElementById("idSearch").value = patientId;
+    document.getElementById("dateSearch").valueAsNumber = dob;
+    if (spec == "SKIN") {
+        document.getElementById("givenName").value = name.toUpperCase();
+        document.getElementById("patientId").value = patientId;
+    }
+
+    document.getElementById("lastGivenName").value = lastname.toUpperCase();
+
+    document.getElementById("dateOfBirth").value = new Date(dob).toLocaleString();
+    document.getElementById("searchRowId").value = sId;
+ 
+}
+
+/**
+ * Saves New Patient.
+ * Before Saving, it validates all fields, and shows error messages if any. If all fields passes validations, then the Patient is saved.
+ * 
+ */
+function createNewPatients() {
+    /* var pid = document.getElementById("patientIdS").value; */
+    var dob = document.getElementById("DateOfBirthS").value;
+    var gender = document.getElementById("patientGenderS").value;
+    var ethnicity = document.getElementById("patientEthnicityS").value;
+    var height = document.getElementById("pheightS").value;
+    var weight = document.getElementById("pweightS").value;
+    var firstName = document.getElementById("givenNameS").value
+
+    complete = true;
+    var pid = "NA"
+    
+    var errorMessage = "";
+    document.getElementById("newPatientErrorMsgBlock").innerHTML = "";
+    document.getElementById("newPatientErrorMsgBlock").style.display = "none";
+    /* if (pid == null || pid == "") {
+        error = "Please find existing patient, or create a new one";
+        document.getElementById("patientIdErrorS").style.display = "flex";
+        complete = false;
+    } */
+    if (firstName == null || firstName == "") {
+    	errorMessage += "Please enter First Name. &lt;br/>";
+    }
+    if (dob == null || dob == "" || ((new Date()) - (new Date(dob)) &lt; 1000 * 60 * 60 * 24 * 365 * 18)) {
+        if (dob == null || dob == "") {
+           /*  error = "Please fill out Date of Birth and try again."; */
+           errorMessage += "Please fill out Date of Birth and try again. &lt;br/>" 
+            /* document.getElementById("DateOfBirthErrorS").innerHTML = "Required"
+            document.getElementById("DateOfBirthErrorS").style.display = "flex"; */
+        } else {
+            /* error = "You must be 18 to use this device."; */
+            errorMessage += "Patient must be at least 18 to be registered. &lt;br/>";
+            /* document.getElementById("DateOfBirthErrorS").innerHTML = "You must be 18 to use this device."
+            document.getElementById("DateOfBirthErrorS").style.display = "flex"; */
+        }
+        complete = false;
+    }
+    
+    if (gender == null || gender == "") {
+    	errorMessage += "Please choose Gender and try again. &lt;br/>";
+        /* document.getElementById("patientGenderErrorS").style.display = "flex";*/
+        complete = false; 
+    }
+
+    if (ethnicity == null || ethnicity == "") {
+    	errorMessage += "Please choose Ethnicity and try again. &lt;br/>";
+        /* document.getElementById("patientEthnicityErrorS").style.display = "flex";*/
+        complete = false; 
+    }
+    if (height == null || height == "") {
+    	errorMessage += "Please enter height. &lt;br/>"
+        /* document.getElementById("pheightErrorS").style.display = "flex"; */
+        complete = false;
+    }
+    if (weight == null || weight == "") {
+    	errorMessage += "Please enter weight. &lt;br/>"
+        /* document.getElementById("pweightErrorS").style.display = "flex"; */
+        complete = false;
+    }
+    if (complete) {
+        $.ajax({
+            type: 'POST',
+            url: '/creatNewPatient',
+            cache: false,
+            data: {
+                "patientId": pid,
+                "name": document.getElementById("givenNameS").value,
+                "lastname": document.getElementById("lastGivenName").value,
+                "dob": document.getElementById("DateOfBirthS").value,
+                "gender": document.getElementById("patientGenderS").value,
+                "ethnicity": document.getElementById("patientEthnicityS").value,
+                "height": document.getElementById("pheightS").value,
+                "weight": document.getElementById("pweightS").value
+            },
+            success: function(data) {
+
+                document.getElementById("givenName").value = document.getElementById("givenNameS").value;
+                /* document.getElementById("patientId").value = document.getElementById("patientIdS").value; */
+                var modal = document.getElementById('myModal');
+                modal.style.display = "block";
+                document.getElementById("savedPatient").innerHTML = document.getElementById("givenNameS").value + " " + document.getElementById("lastGivenName").value +  " has been added successfully. ";
+                selectSearchNew("P" + pad(data.subjectId, 6), data.dob, data.givenname, data.lastname, data.subjectId);
+                spec = document.getElementById("SpectraType").value;
+                if (spec == "SKIN") {
+                    document.getElementById("newPtNext").onclick = vitalDisplay;
+                } else if (spec == "BLOOD") {
+                    document.getElementById("newPtNext").onclick = orderdetailblood;
+                }
+                document.getElementById("newPtNextText").innerHTML = "Next";
+            }
+        })
+    }else{
+    	document.getElementById("newPatientErrorMsgBlock").style.display = "block";
+    	document.getElementById("newPatientErrorMsgBlock").insertAdjacentHTML('afterbegin', errorMessage + "&lt;br/>")
+    }
+
+}
+
+/**
+ * For Skin Spectrometer, shows the Vitals Page.
+ * 
+ */
+function vitalDisplay() {
+    document.getElementById("title").innerHTML = "STEP 2: PATIENT VITALS";
+    showTable("vitalsPt");
+    document.getElementById("patientVitalsErrorMsgBlock").innerHTML = ""
+    document.getElementById("patientIdRuntest").value = document.getElementById("idSearch").value;
+    document.getElementById("givenNameRuntest").value = document.getElementById("nameSearch").value;
+}
+
+/**
+ * Triggered by Search Button in patient search screen. If Patient Records table has any records, it displays the table, else, it gives the option
+ * to create new patient
+ * 
+ */
+function searchPt() {
+    if (document.getElementById("pFilterResult").rows.length == 1) {
+        var newPtWindow = document.getElementById("noPtResult");
+        newPtWindow.style.display = "block";
+        document.getElementById("selectPatient").style.display = "none";
+        document.getElementById("noPtResultSpan").onclick = function() {
+            newPtWindow.style.display = "none";
+        }
+    } else {
+        document.getElementById("selectPatient").style.display = "block";
+        document.getElementById("searchPtButton").innerHTML = "Next";
+        document.getElementById("searchPtButtonImg").onclick = function() {
+            slectedPatientnext()
+        };
+    }
+}
+
+/**
+ * Triggered by Next button in patient search screen. If User has clicked a record from the search result, then it shows the Patient Details page and populates
+ * the selected patient's details, else, it asks the user to select a patient.
+ * 
+ */
+function slectedPatientnext() {
+	if(document.getElementById("searchRowId").value == ""){
+		alert("Please choose a Patient before proceeding to Next Screen");
+		return;
+	}
+	var tbody = document.getElementById('pFilterResult').getElementsByTagName("tbody")[0];
+    tbody.innerHTML = "";
+    showTable("ptDetails");
+    document.getElementById("title").innerHTML = "PATIENT DETAILS";
+    searchRowId = document.getElementById("searchRowId").value;
+    document.getElementById("fGivenName").innerHTML = document.getElementById("nameSearch").value;
+    document.getElementById("lGivenName").innerHTML = document.getElementById("lastNameSearch").value;
+    $.getJSON('/Patientinformation', {
+        searchRowId: searchRowId,
+    }, function(data, status) {
+        console.log("received patient data: " + data);
+        document.getElementById("dDOB").innerHTML = data.dateOfBirth;
+        document.getElementById("dGender").innerHTML = data.gender;
+        document.getElementById("patientGender").value = data.gender;
+        document.getElementById("dEthicity").innerHTML = data.ethnicity;
+        document.getElementById("patientEthnicity").value = data.ethnicity;
+        document.getElementById("dHeight").innerHTML = data.height + " Inchs";
+        document.getElementById("patientHeight").value = data.height;
+        document.getElementById("dWeight").innerHTML = data.weight + " Lbs.";
+        document.getElementById("patientWeight").value = data.weight;
+        document.getElementById("dMed").innerHTML = data.meds;
+        subjectIdforVitals = data.subjectId;
+        vitalRecords(subjectIdforVitals);
+    });
+    $.get("/getNewOrderNo", function(data, status) {
+        document.getElementById("orderNo").value = data;
+        document.getElementById("msg").value = "";
+    });
+}
+
+
+/**
+ * Called by function slectedPatientnext. This function prepares the Vital Records Table for the selected patient.
+ * @param {int} subjectIdforVitals Subject ID of the patient 
+ */
+function vitalRecords(subjectIdforVitals) {
+    subjectIdforVitals = subjectIdforVitals
+    $.get("/getvitalHistory", {
+        subjectIdforVitals
+    }, function(data, status) {
+
+        var tbody = document.getElementById('vitalLog').getElementsByTagName("tbody")[0];
+        tbody.innerHTML = "";
+
+        for (i = 0; i &lt; data.length; i++) {
+            var row = tbody.insertRow(-1);
+            row.id = data[i].split("-")[0];
+            row.insertCell(-1).innerHTML = ((new Date(data[i].split("-")[1]).toLocaleString()).toString()).split(", ")[0];
+            row.insertCell(-1).innerHTML = ((new Date(data[i].split("-")[1]).toLocaleString()).toString()).split(", ")[1];
+
+            row.setAttribute("class", "selectTableTr");
+
+            row.onclick = function(data) {
+                var vId = $(this).attr('id');
+                selectSearchVital(vId);
+                selectedRow = document.getElementsByClassName("selectTableTr selected");
+                if (selectedRow.length > 0) {
+                    selectedRow[0].classList.remove("selected");
+                }
+                this.classList.add("selected");
+            }
+
+        }
+    })
+}
+
+/**
+ * In Vitals History Page, triggered when user clicks a row in the vital records table. For the record selected, it shows the vitals.
+ * @param {int} rowId Row ID of the selected row which is also the Vitals ID for the patient 
+ */
+function selectSearchVital(rowId) {
+    rowId = rowId;
+    $.get("/getvitalDetails", {
+        rowId
+    }, function(data, status) {
+        document.getElementById("vitalhistoryDateHeader").innerHTML = document.getElementsByClassName("selectTableTr selected")[0].innerText;
+        $("#tSLM").text(data.meal);
+        $("#tempVital").text("\u2109(" + data.temperature + ")");
+        $("#bpVital").text("mmHg(" + data.systolicBp + "/" + data.diastolicBp + ")");
+        $("#hrVital").text("BPM(" + data.heartRate + ")");
+        $("#olVital").text("%(" + data.oxygenLevel + ")");
+        $("#ocVital").text("%(" + data.oilContent + ")");
+        $("#hvital").text("%(" + data.hydration + ")");
+        $("#glVital").text("mg/dl");
+
+    })
+
+}
+
+/**
+ * Show Vital History Page
+ * 
+ */
+function vitalHistory() {
+    showTable("vitalRecordContent");
+    document.getElementById("patientIdVital").value = document.getElementById("idSearch").value;
+    document.getElementById("patientNameVital").value = document.getElementById("nameSearch").value;
+}</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#adminDashboard">adminDashboard</a></li><li><a href="global.html#back">back</a></li><li><a href="global.html#caf2CalibrationData">caf2CalibrationData</a></li><li><a href="global.html#caf2StatusSource">caf2StatusSource</a></li><li><a href="global.html#calibrateScreenOne">calibrateScreenOne</a></li><li><a href="global.html#cameraCalibrate">cameraCalibrate</a></li><li><a href="global.html#changeColorByStatus">changeColorByStatus</a></li><li><a href="global.html#checkingStatus">checkingStatus</a></li><li><a href="global.html#checkSessionTimeout">checkSessionTimeout</a></li><li><a href="global.html#checkStatus">checkStatus</a></li><li><a href="global.html#checkVersion">checkVersion</a></li><li><a href="global.html#collapseDesc">collapseDesc</a></li><li><a href="global.html#continueSegment">continueSegment</a></li><li><a href="global.html#createNewPatients">createNewPatients</a></li><li><a href="global.html#descInputChange">descInputChange</a></li><li><a href="global.html#displayResults">displayResults</a></li><li><a href="global.html#drawGraphs">drawGraphs</a></li><li><a href="global.html#elapsedTime">elapsedTime</a></li><li><a href="global.html#expandDesc">expandDesc</a></li><li><a href="global.html#exsistPt">exsistPt</a></li><li><a href="global.html#factoryCalibrateContent">factoryCalibrateContent</a></li><li><a href="global.html#get24HourDateTime">get24HourDateTime</a></li><li><a href="global.html#getCaf2Calibration">getCaf2Calibration</a></li><li><a href="global.html#getImage">getImage</a></li><li><a href="global.html#getLastCalibration">getLastCalibration</a></li><li><a href="global.html#getNewVersion">getNewVersion</a></li><li><a href="global.html#isNumeric">isNumeric</a></li><li><a href="global.html#isPositiveNumber">isPositiveNumber</a></li><li><a href="global.html#mealDurationChange">mealDurationChange</a></li><li><a href="global.html#mealTimeChange">mealTimeChange</a></li><li><a href="global.html#newpatient">newpatient</a></li><li><a href="global.html#newPatientReset">newPatientReset</a></li><li><a href="global.html#opDahboardDisplay">opDahboardDisplay</a></li><li><a href="global.html#orderdetailblood">orderdetailblood</a></li><li><a href="global.html#pad">pad</a></li><li><a href="global.html#postRunNotes">postRunNotes</a></li><li><a href="global.html#printResults">printResults</a></li><li><a href="global.html#procedureChange">procedureChange</a></li><li><a href="global.html#ranProcedureOnce">ranProcedureOnce</a></li><li><a href="global.html#recalibratebutton">recalibratebutton</a></li><li><a href="global.html#refreshPage">refreshPage</a></li><li><a href="global.html#resetSearch">resetSearch</a></li><li><a href="global.html#runningSource">runningSource</a></li><li><a href="global.html#RunTest">RunTest</a></li><li><a href="global.html#saveCaf2Calibration">saveCaf2Calibration</a></li><li><a href="global.html#searchPatient">searchPatient</a></li><li><a href="global.html#searchPt">searchPt</a></li><li><a href="global.html#selectSearchNew">selectSearchNew</a></li><li><a href="global.html#selectSearchVital">selectSearchVital</a></li><li><a href="global.html#setOrderDisplay">setOrderDisplay</a></li><li><a href="global.html#showMonitoring">showMonitoring</a></li><li><a href="global.html#showTable">showTable</a></li><li><a href="global.html#showWaveLengthCalibration">showWaveLengthCalibration</a></li><li><a href="global.html#shutdownMonitoring">shutdownMonitoring</a></li><li><a href="global.html#slectedPatientnext">slectedPatientnext</a></li><li><a href="global.html#spec">spec</a></li><li><a href="global.html#specimenChange">specimenChange</a></li><li><a href="global.html#stack">stack</a></li><li><a href="global.html#statusUpdates">statusUpdates</a></li><li><a href="global.html#toggleMainNavIcons">toggleMainNavIcons</a></li><li><a href="global.html#vitalDisplay">vitalDisplay</a></li><li><a href="global.html#vitalHistory">vitalHistory</a></li><li><a href="global.html#vitalRecords">vitalRecords</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Tue May 01 2018 17:13:39 GMT-0400 (Eastern Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
